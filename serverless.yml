@@ -10,6 +10,7 @@ provider:
   environment:
     TABLE_TENANTS: ${sls:stage}-t_tenants-proy
     TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
+    TABLE_TENANTS_LOCKS: ${sls:stage}-t_tenants_locks-proy
     INDEX_NOMBRE: nombre_normalizado-index
     SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
 
@@ -74,7 +75,7 @@ functions:
 
 resources:
   Resources:
-    # Tabla 1: Tenants
+    # Tabla 1: Tenants (con GSI para verificar nombre de empresa duplicado)
     TablaTenants:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -94,6 +95,19 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: KEYS_ONLY
+        BillingMode: PAY_PER_REQUEST
+
+    # Tabla 1b: Candados de nombre de empresa (evita registros simultáneos duplicados)
+    TablaTenantsLocks:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_TENANTS_LOCKS}
+        AttributeDefinitions:
+          - AttributeName: nombre_normalizado
+            AttributeType: S
+        KeySchema:
+          - AttributeName: nombre_normalizado
+            KeyType: HASH
         BillingMode: PAY_PER_REQUEST
 
     # Tabla 2: Usuarios (con GSI para búsqueda por correo en el Login)

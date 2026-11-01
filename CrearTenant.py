@@ -26,6 +26,7 @@ def lambda_handler(event, context):
     
     tabla_tenants = os.environ.get("TABLE_TENANTS", "t_tenants")
     tabla_usuarios = os.environ.get("TABLE_USUARIOS", "t_usuarios")
+    tabla_locks = os.environ.get("TABLE_TENANTS_LOCKS", "t_tenants_locks")
     indice_nombre = os.environ.get("INDEX_NOMBRE", "nombre_normalizado-index")
     sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
     
@@ -40,6 +41,7 @@ def lambda_handler(event, context):
     # 1. Guardar Tenant en DynamoDB
     dynamodb = boto3.resource('dynamodb')
     table_tenants = dynamodb.Table(tabla_tenants)
+    table_locks = dynamodb.Table(tabla_locks)
     
     # Normalizar nombre (ignora mayúsculas y espacios extra)
     nombre_normalizado = ' '.join(nombre_empresa.strip().lower().split())
@@ -56,12 +58,11 @@ def lambda_handler(event, context):
             'body': json.dumps({'codigo': 'empresa_existente', 'mensaje': 'La empresa ya se encuentra registrada'})
         }
     
-    # Item "candado": evita que dos peticiones simultáneas registren el mismo nombre
-    lock_id = f"lock_empresa#{nombre_normalizado}"
+    # Candado en tabla aparte: evita que dos peticiones simultáneas registren el mismo nombre
     try:
-        table_tenants.put_item(
-            Item={'tenant_id': lock_id, 'fecha_creacion': fecha_creacion},
-            ConditionExpression='attribute_not_exists(tenant_id)'
+        table_locks.put_item(
+            Item={'nombre_normalizado': nombre_normalizado, 'fecha_creacion': fecha_creacion},
+            ConditionExpression='attribute_not_exists(nombre_normalizado)'
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         return {
@@ -81,7 +82,7 @@ def lambda_handler(event, context):
         response_tenant = table_tenants.put_item(Item=item_tenant)
     except Exception:
         # Liberar el candado si no se pudo guardar el tenant
-        table_tenants.delete_item(Key={'tenant_id': lock_id})
+        table_locks.delete_item(Key={'nombre_normalizado': nombre_normalizado})
         raise
     
     # 2. Guardar Usuario Admin en DynamoDB
