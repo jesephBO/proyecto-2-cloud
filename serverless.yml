@@ -139,4 +139,4 @@ resources:
     EventosCrmTopic:
       Type: AWS::SNS::Topic
       Properties:
-      TopicName: ${sls:stage}-eventos-crm-topic
+        TopicName: ${sls:stage}-eventos-crm-topic
