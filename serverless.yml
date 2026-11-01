@@ -12,7 +12,7 @@ provider:
     TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
     TABLE_TENANTS_LOCKS: ${sls:stage}-t_tenants_locks-proy
     INDEX_NOMBRE: nombre_normalizado-index
-    SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
+    SNS_TOPIC_ARN: !Ref EventosCrmTopic
 
 functions:
   # Lambda Authorizer para validar tokens
@@ -135,3 +135,8 @@ resources:
             Projection:
               ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
+    
+    EventosCrmTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+      TopicName: ${sls:stage}-eventos-crm-topic
