@@ -39,6 +39,21 @@ def lambda_handler(event, context):
     dynamodb = boto3.resource('dynamodb')
     table_tenants = dynamodb.Table(tabla_tenants)
     
+    # Verificar que la empresa no esté registrada (ignora mayúsculas y espacios extra)
+    nombre_normalizado = ' '.join(nombre_empresa.strip().lower().split())
+    scan_kwargs = {'ProjectionExpression': '#n', 'ExpressionAttributeNames': {'#n': 'nombre'}}
+    while True:
+        response_scan = table_tenants.scan(**scan_kwargs)
+        for item in response_scan.get('Items', []):
+            if ' '.join(item.get('nombre', '').strip().lower().split()) == nombre_normalizado:
+                return {
+                    'statusCode': 409,
+                    'body': json.dumps({'codigo': 'empresa_existente', 'mensaje': 'La empresa ya se encuentra registrada'})
+                }
+        if 'LastEvaluatedKey' not in response_scan:
+            break
+        scan_kwargs['ExclusiveStartKey'] = response_scan['LastEvaluatedKey']
+    
     item_tenant = {
         'tenant_id': tenant_id,
         'nombre': nombre_empresa,
