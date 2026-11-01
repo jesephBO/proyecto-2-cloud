@@ -10,6 +10,7 @@ provider:
   environment:
     TABLE_TENANTS: ${sls:stage}-t_tenants-proy
     TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
+    INDEX_NOMBRE: nombre_normalizado-index
     SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
 
 functions:
