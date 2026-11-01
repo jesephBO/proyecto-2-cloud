@@ -65,22 +65,25 @@ def lambda_handler(event, context):
     
     # 3. Publicar evento en SNS
     if sns_topic_arn:
-        sns = boto3.client('sns')
-        evento = {
-            'evento_id': f"evt_{str(uuid.uuid4())[:8]}",
-            'tipo': 'usuario.creado',
-            'tenant_id': tenant_id,
-            'fecha': fecha_creacion,
-            'datos': {
-                'usuario_id': usuario_id,
-                'nombre': nombre_admin,
-                'rol': 'admin'
+        try:
+            sns = boto3.client('sns')
+            evento = {
+                'evento_id': f"evt_{str(uuid.uuid4())[:8]}",
+                'tipo': 'usuario.creado',
+                'tenant_id': tenant_id,
+                'fecha': fecha_creacion,
+                'datos': {
+                    'usuario_id': usuario_id,
+                    'nombre': nombre_admin,
+                    'rol': 'admin'
+                }
             }
-        }
-        sns.publish(
-            TopicArn=sns_topic_arn,
-            Message=json.dumps(evento)
-        )
+            sns.publish(
+                TopicArn=sns_topic_arn,
+                Message=json.dumps(evento)
+            )
+        except Exception as e_sns:
+            print(f"Advertencia: No se pudo publicar en SNS (Topico no encontrado):         ")
         
     return {
         'statusCode': 201,
