@@ -8,18 +8,18 @@ provider:
   iam:
     role: arn:aws:iam::246946388956:role/LabRole
   environment:
-    TABLE_TENANTS: ${sls:stage}-t_tenants
-    TABLE_USUARIOS: ${sls:stage}-t_usuarios
+    TABLE_TENANTS: ${sls:stage}-t_tenants-proy
+    TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
     SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
 
 functions:
   # Lambda Authorizer para validar tokens
   authorizerFunc:
-    handler: authorizer.lambda_handler
+    handler: Authorizer.lambda_handler
 
   # 1. POST /tenants (Público)
   crearTenant:
-    handler: crear_tenant.lambda_handler
+    handler: CrearTenant.lambda_handler
     events:
       - http:
           path: /tenants
@@ -28,7 +28,7 @@ functions:
 
   # 2. POST /usuarios/login (Público)
   loginUsuario:
-    handler: login_usuario.lambda_handler
+    handler: LoginUsuario.lambda_handler
     events:
       - http:
           path: /usuarios/login
@@ -37,7 +37,7 @@ functions:
 
   # 3. POST /usuarios (Protegido - solo admin)
   crearUsuario:
-    handler: crear_usuario.lambda_handler
+    handler: CrearUsuario.lambda_handler
     events:
       - http:
           path: /usuarios
@@ -49,7 +49,7 @@ functions:
 
   # 4. GET /usuarios (Protegido)
   listarUsuarios:
-    handler: listar_usuarios.lambda_handler
+    handler: ListarUsuarios.lambda_handler
     events:
       - http:
           path: /usuarios
@@ -61,7 +61,7 @@ functions:
 
   # 5. PUT /usuarios/{usuario_id} (Protegido - solo admin)
   actualizarUsuario:
-    handler: actualizar_usuario.lambda_handler
+    handler: ActualizarUsuario.lambda_handler
     events:
       - http:
           path: /usuarios/{usuario_id}
