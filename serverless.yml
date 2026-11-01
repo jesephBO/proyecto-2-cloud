@@ -1,0 +1,113 @@
+service: api-usuarios-tenants
+
+provider:
+  name: aws
+  runtime: python3.13
+  memorySize: 1024
+  timeout: 20
+  iam:
+    role: arn:aws:iam::246946388956:role/LabRole
+  environment:
+    TABLE_TENANTS: ${sls:stage}-t_tenants
+    TABLE_USUARIOS: ${sls:stage}-t_usuarios
+    SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
+
+functions:
+  # Lambda Authorizer para validar tokens
+  authorizerFunc:
+    handler: authorizer.lambda_handler
+
+  # 1. POST /tenants (Público)
+  crearTenant:
+    handler: crear_tenant.lambda_handler
+    events:
+      - http:
+          path: /tenants
+          method: post
+          cors: true
+
+  # 2. POST /usuarios/login (Público)
+  loginUsuario:
+    handler: login_usuario.lambda_handler
+    events:
+      - http:
+          path: /usuarios/login
+          method: post
+          cors: true
+
+  # 3. POST /usuarios (Protegido - solo admin)
+  crearUsuario:
+    handler: crear_usuario.lambda_handler
+    events:
+      - http:
+          path: /usuarios
+          method: post
+          cors: true
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0
+
+  # 4. GET /usuarios (Protegido)
+  listarUsuarios:
+    handler: listar_usuarios.lambda_handler
+    events:
+      - http:
+          path: /usuarios
+          method: get
+          cors: true
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0
+
+  # 5. PUT /usuarios/{usuario_id} (Protegido - solo admin)
+  actualizarUsuario:
+    handler: actualizar_usuario.lambda_handler
+    events:
+      - http:
+          path: /usuarios/{usuario_id}
+          method: put
+          cors: true
+          authorizer:
+            name: authorizerFunc
+            resultTtlInSeconds: 0
+
+resources:
+  Resources:
+    # Tabla 1: Tenants
+    TablaTenants:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_TENANTS}
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+    # Tabla 2: Usuarios (con GSI para búsqueda por correo en el Login)
+    TablaUsuarios:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.TABLE_USUARIOS}
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+          - AttributeName: usuario_id
+            AttributeType: S
+          - AttributeName: correo
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+          - AttributeName: usuario_id
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: correo-index
+            KeySchema:
+              - AttributeName: correo
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        BillingMode: PAY_PER_REQUEST
