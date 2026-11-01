@@ -4,6 +4,7 @@ import os
 import json
 import hashlib
 from datetime import datetime
+from boto3.dynamodb.conditions import Key
 
 def lambda_handler(event, context):
     print(event)
@@ -25,6 +26,7 @@ def lambda_handler(event, context):
     
     tabla_tenants = os.environ.get("TABLE_TENANTS", "t_tenants")
     tabla_usuarios = os.environ.get("TABLE_USUARIOS", "t_usuarios")
+    indice_nombre = os.environ.get("INDEX_NOMBRE", "nombre_normalizado-index")
     sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
     
     # Generar identificadores y hash de contraseña
@@ -39,29 +41,48 @@ def lambda_handler(event, context):
     dynamodb = boto3.resource('dynamodb')
     table_tenants = dynamodb.Table(tabla_tenants)
     
-    # Verificar que la empresa no esté registrada (ignora mayúsculas y espacios extra)
+    # Normalizar nombre (ignora mayúsculas y espacios extra)
     nombre_normalizado = ' '.join(nombre_empresa.strip().lower().split())
-    scan_kwargs = {'ProjectionExpression': '#n', 'ExpressionAttributeNames': {'#n': 'nombre'}}
-    while True:
-        response_scan = table_tenants.scan(**scan_kwargs)
-        for item in response_scan.get('Items', []):
-            if ' '.join(item.get('nombre', '').strip().lower().split()) == nombre_normalizado:
-                return {
-                    'statusCode': 409,
-                    'body': json.dumps({'codigo': 'empresa_existente', 'mensaje': 'La empresa ya se encuentra registrada'})
-                }
-        if 'LastEvaluatedKey' not in response_scan:
-            break
-        scan_kwargs['ExclusiveStartKey'] = response_scan['LastEvaluatedKey']
+    
+    # Verificar que la empresa no esté registrada (consulta por GSI)
+    response_busqueda = table_tenants.query(
+        IndexName=indice_nombre,
+        KeyConditionExpression=Key('nombre_normalizado').eq(nombre_normalizado),
+        Limit=1
+    )
+    if response_busqueda.get('Count', 0) > 0:
+        return {
+            'statusCode': 409,
+            'body': json.dumps({'codigo': 'empresa_existente', 'mensaje': 'La empresa ya se encuentra registrada'})
+        }
+    
+    # Item "candado": evita que dos peticiones simultáneas registren el mismo nombre
+    lock_id = f"lock_empresa#{nombre_normalizado}"
+    try:
+        table_tenants.put_item(
+            Item={'tenant_id': lock_id, 'fecha_creacion': fecha_creacion},
+            ConditionExpression='attribute_not_exists(tenant_id)'
+        )
+    except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+        return {
+            'statusCode': 409,
+            'body': json.dumps({'codigo': 'empresa_existente', 'mensaje': 'La empresa ya se encuentra registrada'})
+        }
     
     item_tenant = {
         'tenant_id': tenant_id,
         'nombre': nombre_empresa,
+        'nombre_normalizado': nombre_normalizado,
         'rubro': rubro,
         'estado': 'activo',
         'fecha_creacion': fecha_creacion
     }
-    response_tenant = table_tenants.put_item(Item=item_tenant)
+    try:
+        response_tenant = table_tenants.put_item(Item=item_tenant)
+    except Exception:
+        # Liberar el candado si no se pudo guardar el tenant
+        table_tenants.delete_item(Key={'tenant_id': lock_id})
+        raise
     
     # 2. Guardar Usuario Admin en DynamoDB
     table_usuarios = dynamodb.Table(tabla_usuarios)
@@ -98,7 +119,7 @@ def lambda_handler(event, context):
                 Message=json.dumps(evento)
             )
         except Exception as e_sns:
-            print(f"Advertencia: No se pudo publicar en SNS (Topico no encontrado):         ")
+            print(f"Advertencia: No se pudo publicar en SNS: {e_sns}")
         
     return {
         'statusCode': 201,

@@ -10,6 +10,7 @@ provider:
   environment:
     TABLE_TENANTS: ${sls:stage}-t_tenants-proy
     TABLE_USUARIOS: ${sls:stage}-t_usuarios-proy
+    INDEX_NOMBRE: nombre_normalizado-index
     SNS_TOPIC_ARN: arn:aws:sns:us-east-1:246946388956:eventos-crm-topic
 
 functions:
@@ -74,16 +75,25 @@ functions:
 resources:
   Resources:
     # Tabla 1: Tenants
-    TablaTenants:
+        TablaTenants:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:provider.environment.TABLE_TENANTS}
         AttributeDefinitions:
           - AttributeName: tenant_id
             AttributeType: S
+          - AttributeName: nombre_normalizado
+            AttributeType: S
         KeySchema:
           - AttributeName: tenant_id
             KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.INDEX_NOMBRE}
+            KeySchema:
+              - AttributeName: nombre_normalizado
+                KeyType: HASH
+            Projection:
+              ProjectionType: KEYS_ONLY
         BillingMode: PAY_PER_REQUEST
 
     # Tabla 2: Usuarios (con GSI para búsqueda por correo en el Login)
